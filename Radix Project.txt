@@ -1,0 +1,363 @@
+; AddTwo.asm - adds two 32-bit integers.
+; Chapter 3 example
+
+.386
+.model flat, stdcall
+.stack 4096
+ExitProcess PROTO, dwExitCode:DWORD
+INCLUDE Irvine32.inc
+ 
+.data
+prompt   BYTE  "Please enter the input radix( e.g '8'=octal, 16 or 'H/h'=hex, 'x' to exit): ",0
+promptA  BYTE  "Enter the number A: ",0
+promptB  BYTE  "Enter the number B: ",0
+addition BYTE  "A+B=",0
+subt     BYTE  "A-B=",0
+mult     BYTE  "A*B=",0
+divd     BYTE  "A/B=",0
+pow      BYTE  "A^B=",0
+
+
+Sbase    BYTE 3 dup(0)
+base1    DWORD  ?
+base2    DWORD  ?
+
+Snum     BYTE  5 dup(0)
+num1     DWORD  ?
+num2     DWORD  ?
+temp     DWORD  ?
+negFlag  BYTE   0
+
+notValidBase BYTE "Invalid Base, Please try again!",10,0
+NumnotValid  BYTE "Invalid number, Please try again (Enter Number): ",0
+hex      BYTE 4 dup(0)," hex, ",0
+deci      BYTE 4 dup(0)," dec",10,0
+
+.code
+
+mainLoop:
+main PROC
+call getBase
+cmp bl, 'x'						;looks for exit command
+je ExitProgram
+mov base1, eax
+call getBase
+cmp bl, 'x'
+je ExitProgram
+mov base2, eax
+								;Saves Base and numebers into memory
+mov edx, offset promptA
+call WriteString
+mov ebx, base1
+call getNum
+mov num1, eax
+mov edx, offset promptB
+call WriteString
+mov ebx, base2
+call getNum
+mov num2, eax
+								;"Addition =" Output
+call crlf
+mov ebx, num1
+add eax, ebx
+mov edx, offset addition
+call WriteString
+call PrintAns
+								;"Subtraction =" Output
+call crlf
+mov eax, num1
+mov ebx, num2
+sub eax, ebx
+mov edx, offset subt
+call WriteString
+call PrintAns
+								;"Multiplication =" Output
+call crlf
+mov eax, num1
+mov ebx, num2
+mul ebx
+mov edx, offset mult
+call WriteString
+call PrintAns
+								;"Division =" Output
+call crlf
+mov eax, num1
+mov ebx, num2
+cmp ebx, 0
+jg divide
+neg ebx
+mov negFlag, 1
+divide:
+mov edx, 0
+div ebx
+cmp negFlag, 0
+je skipConversion
+neg eax
+mov negFlag, 0
+skipConversion:
+mov edx, offset divd
+call WriteString
+call PrintAns
+								;"Power =" Output
+call crlf
+mov eax, num1
+mov ebx, num2
+mov edx, offset pow
+call WriteString
+call power
+call PrintAns
+
+call Crlf
+jmp mainLoop
+ExitProgram:
+call Crlf
+call WaitMsg     
+exit                           ; exit program
+main ENDP
+;===============EXPONENT PROCEDURE=============
+power PROC
+cmp ebx, 0
+jg posPower
+cmp ebx, 0
+je One
+neg ebx
+posPower:
+mov ecx, ebx
+dec ecx
+mov ebx, eax
+powLoop:
+mul ebx
+loop powLoop
+ret
+One:
+mov eax, 1
+ret
+power ENDP
+;===============PRINT ANSWER PROCEDURE=============
+PrintAns PROC
+mov temp, eax
+mov esi, offset hex
+add esi, 3
+mov ebx, 16
+mov ecx, 4
+cmp eax, 0
+jge HexToAscii
+neg eax
+mov dl,'-'						
+mov hex[0], dl					;Negative symbol inputted
+dec ecx
+HexToAscii:						;Converts the Hex number into Ascii for output
+mov edx, 0
+div ebx
+cmp dl, 9
+jle nonHex					
+sub dl, 10
+add dl, 'A'
+jmp skipHex
+nonHex:
+add dl, 48
+skipHex:
+mov [esi], dl
+dec esi
+loop HexToAscii
+mov edx, offset hex
+call WriteString
+
+mov eax, temp
+mov esi, offset deci
+add esi, 3
+mov ebx, 10
+mov ecx, 4
+cmp eax, 0
+jge DecToAscii
+neg eax
+mov dl,'-'
+mov deci[0], dl
+dec ecx
+DecToAscii:					;Converts the decimal number into Ascii for output
+mov edx, 0
+div ebx
+add dl, 48
+mov [esi], dl
+dec esi
+loop DecToAscii
+mov edx, offset deci
+call WriteString
+
+ret
+PrintAns ENDP
+;===============GET NUMBERS PROCEDURE=============
+getNum   PROC
+mov temp, ebx
+getNumAgain:
+mov dh, bl
+cmp ebx, 9
+jle skipCase
+sub ebx, 10
+mov edx, ebx
+add ebx, 'A'
+add edx, 'a'
+mov dh, 09
+skipCase:
+add dh, 48
+
+mov esi, offset Snum
+mov ecx, 4
+readnum:
+call ReadChar
+call WriteChar
+cmp al, 13
+je readnumExit
+.IF( al <= '9')					
+ jmp skipIFs
+ .ENDIF
+.IF (al < 'a' && al > bl)		;Checks for Number A being grater than Number B
+ jmp InavlidNum
+.ENDIF
+.IF (al > 'a' && al > dl)
+ jmp InavlidNum
+.ENDIF
+jmp skipIF
+skipIFs:
+.IF(al >= dh)
+  jmp InavlidNum
+ .ENDIF
+skipIF:
+mov [esi], al
+inc esi
+loop readnum
+readnumExit:
+call Crlf
+mov esi, offset Snum
+mov ebx, temp
+call ConvertBNumToDec
+
+ret
+InavlidNum:
+call Crlf
+mov edx, offset NumnotValid
+call WriteString
+mov ebx, temp
+jmp getNumAgain
+
+getNum   ENDP
+;===============CONVERTS BINARY TO DECIMAL PROCEDURE=============
+ConvertBNumToDec PROC
+mov eax, 0
+mov edx, 0
+mov cl, [esi]
+cmp cl, '-'
+jne while2
+mov negFlag, 1
+inc esi
+while2:
+mov cl, [esi]
+cmp cl, 0
+je exitWhile2
+cmp cl, 'a'
+jl skipa
+sub cl, 'a'
+add cl, 10
+jmp skip1
+skipa:
+cmp cl, 'A'
+jl skip
+sub cl, 'A'
+add cl, 10
+jmp skip1
+skip:
+sub cl, 48
+skip1:
+mul bx
+add al, cl
+mov cl, 0
+mov [esi], cl
+inc esi
+jmp while2
+exitWhile2:
+cmp negFlag, 0
+jne negate
+ret
+negate:
+mov negFlag, 0
+neg eax
+ret
+ConvertBNumToDec ENDP
+
+;===============GET RADIX PROCEDURE================
+getBase  PROC
+getBaseAgain:
+mov edx, offset prompt
+call WriteString
+mov esi, offset Sbase
+mov ecx, 2
+readBase:
+call ReadChar
+call WriteChar
+cmp al, 10
+je ExitreadBase
+mov [esi], al
+inc esi
+loop readBase
+Call Crlf
+ExitreadBase:
+mov esi, offset Sbase
+call ConvertBaseToDec
+cmp eax, 36
+jg InavlidBase
+cmp eax, 2
+jl InavlidBase
+ret
+
+InavlidBase:
+mov edx, offset notValidBase
+call WriteString
+jmp getBaseAgain
+getBase  ENDP
+;=====================CONVERT BASE TO DECIMAL==================
+ConvertBaseToDec PROC
+mov eax, 0
+mov al, [esi]
+cmp al, 'H'
+je HexBase
+cmp al, 'X'
+je XBase
+cmp al, 'h'
+je HexBase
+cmp al, 'x'
+je XBase
+cmp al, '9'
+jg BaseInv
+sub al, 48
+mov bl, 10
+mul bl
+inc esi
+mov bl, [esi]
+cmp bl,13
+je zeroFound
+sub bl,48
+add al,bl
+jmp zeroSkip
+zeroFound:
+mov bl, 10
+div bl
+
+zeroSkip:
+mov bl,0
+mov [esi], bl
+ret
+HexBase:
+mov eax, 16
+ret
+XBase:
+mov eax,2
+mov bl,'x'
+ret
+
+BaseInv:
+mov eax, 1
+ret
+
+ConvertBaseToDec ENDP
+
+END MAIN
